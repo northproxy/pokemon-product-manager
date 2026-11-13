@@ -18,6 +18,16 @@ Approved by the owner on 2026-11-13:
 | PPM-007 | Populate the catalogue through reviewed expansion batches. Market acquisition must not automatically create approved canonical records. Preserve existing catalogue and user-owned data. |
 | PPM-008 | Validate Primal Clash integration, then selected history and CSV export, then the Karmesin & Purpur Base Set workflow before continuing the mobile collection scenario. |
 
+Approved naming clarification on 2026-11-13:
+
+| ID | Decision |
+| --- | --- |
+| PPM-009 | Use `pokemon-product-catalogue` for the catalogue project and planned source-repository name, and `pokemon_product_catalogue` for the eventual PostgreSQL database. Existing source URLs and runtime names remain until explicitly renamed. |
+
+## Trial evidence, 2026-11-13/14
+
+The owner verified catalogue backup/restore, 17-migration schema replay, the selected BI history import, and the Weedle CSV export. The trial used existing snapshot columns and retained all source metrics in staging JSON. This is evidence for ADR-001/003, not automatic acceptance of the complete proposed architecture. See the [trial report](docs/import/primal-clash-history-trial.md).
+
 ## Proposed architecture decisions
 
 | ID | Proposal | Evidence needed for acceptance |
@@ -31,7 +41,7 @@ Approved by the owner on 2026-11-13:
 - Determine the Wishlist release gate, including CSV export and delivery order relative to the sealed workflow.
 - Establish what identifies a sealed version and when a packaging variation requires a separate contents configuration.
 - Compare a shared physical-item identity with separate card and sealed inventory tables.
-- Before implementing the importer, decide how to store additional BI metrics and how to handle corrected snapshots, missing source timestamps, and observations without `avg30` or `avg30_holo`.
+- Before generalizing the trial importer, decide how to store queryable additional BI metrics and how to handle corrected snapshots, missing source timestamps, missing market products, and observations without `avg30` or `avg30_holo`. The scoped trial retains extra metrics in staging JSON and rejects conflicts.
 - Define how to allocate cost and proceeds for multi-item transactions and how to handle multiple currencies.
 - Decide local phone access and PWA installation requirements after the prototype.
 

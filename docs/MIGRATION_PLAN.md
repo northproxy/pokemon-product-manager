@@ -1,6 +1,6 @@
 # Migration plan
 
-Status: Revised sequence approved by the owner on 2026-11-13; execution and database validation pending. Execute the first rehearsal against isolated local copies.
+Status: Revised sequence approved on 2026-11-13. Catalogue restore/schema replay and the scoped Primal Clash history trial were verified on the owner's isolated PostgreSQL 17.10 environment on 2026-11-13/14. See the [trial report](import/primal-clash-history-trial.md). Production migration and complete archive inventory remain pending.
 
 ## Integration boundary
 
@@ -12,8 +12,8 @@ Integrate the canonical catalogue with locally archived market data; do not blin
 
 | Source | GitHub baseline | Evidence and verification gaps |
 | --- | --- | --- |
-| Pokémon Card Wishlist | [`3de6388bf2af7862e0a090dad673423e7d49a37e`](https://github.com/northproxy/pokemon-card-wishlist/commit/3de6388bf2af7862e0a090dad673423e7d49a37e) | The 17 migration files define 21 application tables. The checked-in `db/schema.sql` contains only `schema_migrations`. The roadmap documents a complete Primal Clash slice and 30 canonical `me55c` cards. Verify the owner-reported third expansion in the running database. |
-| Pokémon Cardmarket BI | [`a86f689aee836078a28912f6190925f79f105f83`](https://github.com/northproxy/pokemon-cardmarket-bi/commit/a86f689aee836078a28912f6190925f79f105f83) | The price and product download workflows are configured for archiving. Determine actual archive coverage and the contents of any legacy databases during the audit. |
+| Pokémon Card Wishlist | [`3de6388bf2af7862e0a090dad673423e7d49a37e`](https://github.com/northproxy/pokemon-card-wishlist/commit/3de6388bf2af7862e0a090dad673423e7d49a37e) | The 17 migration files define 21 application tables. The checked-in `db/schema.sql` contains only `schema_migrations`. The owner verified 3 expansions: Primal Clash (164 cards), Lost Origin (217), and 30th Celebration: Classic Collection (30). All 17 migration versions matched; a fresh restore matched schema/data and an independent migration replay reproduced the schema. |
+| Pokémon Cardmarket BI | [`a86f689aee836078a28912f6190925f79f105f83`](https://github.com/northproxy/pokemon-cardmarket-bi/commit/a86f689aee836078a28912f6190925f79f105f83) | The price and product download workflows are configured for archiving. The restored 2026-08-23 prod dump contains 76,584 products and 2,162,804 price rows across 28 archive dates. Full raw-archive coverage still requires inventory. |
 
 ## Code reuse candidates
 
@@ -21,7 +21,17 @@ Integrate the canonical catalogue with locally archived market data; do not blin
 - BI. Evaluate `src/transform/price_guide.py`, `src/transform/product_catalogs.py`, their tests, and the required download and archive helpers. Keep the existing Actions, loaders, schema, legacy stores, and collection and watchlist data at source during the trial. Adapt the database write path to the Wishlist staging and audit model.
 - For each reused asset, record its source path, commit, and applicable attribution. Confirm redistribution rights before copying source data or images.
 
-## Local rehearsal
+## Completed scoped rehearsal
+
+- Backup restore and migration replay succeeded; preserve the original 17 migration files.
+- The actual trial input was a selected CSV export from the restored BI database, not a replay of original daily JSON files. Do not claim JSON acquisition-to-import validation.
+- All rows in this selection have a source timestamp and at least one avg30 metric. Existing columns suffice: avg30/avg30_holo go to price snapshots, all 12 original metrics and both date concepts remain in staging raw_payload.
+- Duplicate source observations are consolidated with per-input audit outcomes. Conflicting existing projected prices abort the transaction; there is no overwrite or correction policy.
+- The owner confirmed the first import and a one-product SQL export. Replay/conflict behavior was tested locally with PGlite; a second owner-side import was not requested.
+- No additional schema migrations were needed. The original catalogue and BI data were not targeted by import writes.
+- The next data expansion is Karmesin & Purpur Base Set, after agreeing its sources and coverage. General handling of missing products, missing timestamps, absent avg30 metrics, and corrected files remains open.
+
+## Rehearsal procedure and remaining gates
 
 1. Audit the running Wishlist database with read-only queries. Record the PostgreSQL version, applied migrations, schema, imported expansions, and counts for cards, market products, mappings, snapshots, Wishlist, and audit data. Audit any existing local BI databases separately from the archive. Inventory local price and product archives: paths, file counts, total bytes, date coverage, checksums, source timestamps, invalid files, gaps, and backup availability. Record the transport from GitHub acquisition to the local archive without assuming it is automated.
 2. Take a Wishlist backup and restore it to an isolated database. Independently replay the existing migration chain on an empty database and compare its schema with the restored copy. Compare source and restored data, including internal IDs, foreign keys, and user-owned Wishlist records. Run the existing schema and Primal Clash checks.

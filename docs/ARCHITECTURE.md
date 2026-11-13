@@ -20,7 +20,7 @@ The catalogue supplies the identity used by Wishlist and Inventory. Market Data 
 
 ## Archive and catalogue boundaries
 
-The existing BI GitHub Action downloads daily Cardmarket price snapshots. The owner retains the archive locally. Local archive coverage, backups, and any existing BI database contents still require audit; scheduled acquisition does not prove database loading or uninterrupted coverage.
+The existing BI GitHub Action downloads daily Cardmarket price snapshots. The owner retains the archive locally. The BI restore and catalogue backup have been audited for the scoped trial. Complete local raw-archive coverage and transport still require inventory; scheduled acquisition does not prove database loading or uninterrupted coverage.
 
 - Keep acquisition running independently of catalogue expansion. Do not change source Actions during the integration trial.
 - Retain original price and product files outside Git with checksums, source timestamps, and acquisition dates. An archive is replayable input, not a query database.
@@ -37,6 +37,14 @@ Use one expansion as an import batch, initially Karmesin & Purpur Base Set after
 For each batch: define languages and coverage; verify structured card-source coverage against official checklists; retain source URLs, retrieval dates, and files; stage and validate records; review conflicts and Cardmarket mappings; approve the change report; merge transactionally; verify repeatability and user-data preservation. Establish sealed identity and contents from official descriptions and packaging evidence, recording uncertain contents explicitly.
 
 The specific sources and acceptance counts must be checked for each expansion. Do not infer language/finish variants or exact-language prices from aggregate Cardmarket data.
+
+## Current trial implementation
+
+Two manual development utilities live in `scripts/import/` and `scripts/export/`. They use Python's standard library and Docker/psql against the existing isolated catalogue copy. This is an interim trial implementation, not the proposed shared API package.
+
+The verified import projects avg30/avg30_holo into existing price snapshots and retains the full CSV rows, including other metrics and archive dates, in `staging_market_prices.raw_payload`. Keep that staging evidence. The initial export supports only the two projected metrics and source observation time; archive-date/provenance export is still future work. No canonical identities or schema definitions change.
+
+The eventual catalogue database name is `pokemon_product_catalogue`. Existing `pokemon_wishlist*` names and source containers are retained during the rehearsal. See the [trial report](import/primal-clash-history-trial.md).
 
 ## Proposed repository layout
 
