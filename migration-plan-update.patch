@@ -1,0 +1,133 @@
+--- a/docs/ARCHITECTURE.md
++++ b/docs/ARCHITECTURE.md
+@@ -1,8 +1,8 @@
+ # Architecture
+ 
+-Status: Proposed. See the [decision log](../DECISIONS.md) for acceptance criteria.
++Status: Application stack proposed; archive and selective-import direction approved by the owner on 2026-11-13. See the [decision log](../DECISIONS.md) for acceptance criteria.
+ 
+-A mobile-first web frontend would call one backend API backed by one PostgreSQL 17 database. Manual import commands would use the same Python package as the API. Raw market files would remain available for replay and reconciliation. The web client would access data through the API.
++A mobile-first web frontend would call one backend API backed by one PostgreSQL 17 database. Manual import commands would use the same Python package as the API. The full locally retained market archive remains independent of the application database. Only selected product histories are imported initially; a separate full-history analytics database is deferred pending volume and performance evidence. The web client would access data through the API.
+ 
+ ## Module responsibilities
+ 
+@@ -18,6 +18,26 @@
+ 
+ The catalogue supplies the identity used by Wishlist and Inventory. Market Data owns the link between marketplace records and canonical entities. A purchase or sale changes transaction history and the affected copy's ownership state atomically.
+ 
++## Archive and catalogue boundaries
++
++The existing BI GitHub Action downloads daily Cardmarket price snapshots. The owner retains the archive locally. Local archive coverage, backups, and any existing BI database contents still require audit; scheduled acquisition does not prove database loading or uninterrupted coverage.
++
++- Keep acquisition running independently of catalogue expansion. Do not change source Actions during the integration trial.
++- Retain original price and product files outside Git with checksums, source timestamps, and acquisition dates. An archive is replayable input, not a query database.
++- Import history for an explicit product selection and date range through staging, validation, reconciliation, and an audit record.
++- Preserve internal catalogue IDs and resolve external products by `(source_system, source_product_id)`. Unreviewed market products must not create approved canonical cards or sealed definitions.
++- Preserve all source metrics in the archive. Decide the queryable metric schema before implementation; the catalogue's existing `avg30` and `avg30_holo` columns cannot represent all BI metrics.
++- Export selected histories with product identity, source observation timestamp, archive date, currency, metric names, and values. Keep gaps and unavailable values visible; do not interpolate missing days.
++- Keep catalogue imports separate from Wishlist, inventory, and transaction records.
++
++## Controlled catalogue expansion
++
++Use one expansion as an import batch, initially Karmesin & Purpur Base Set after the Primal Clash integration trial. Distinguish era/series, expansion, canonical card, and sealed product. A sealed contents configuration may reference multiple expansions.
++
++For each batch: define languages and coverage; verify structured card-source coverage against official checklists; retain source URLs, retrieval dates, and files; stage and validate records; review conflicts and Cardmarket mappings; approve the change report; merge transactionally; verify repeatability and user-data preservation. Establish sealed identity and contents from official descriptions and packaging evidence, recording uncertain contents explicitly.
++
++The specific sources and acceptance counts must be checked for each expansion. Do not infer language/finish variants or exact-language prices from aggregate Cardmarket data.
++
+ ## Proposed repository layout
+ 
+ | Path | Purpose |
+--- a/docs/MIGRATION_PLAN.md
++++ b/docs/MIGRATION_PLAN.md
+@@ -1,6 +1,12 @@
+ # Migration plan
+ 
+-Status: Proposed. Execute the first rehearsal against isolated local copies.
++Status: Revised sequence approved by the owner on 2026-11-13; execution and database validation pending. Execute the first rehearsal against isolated local copies.
++
++## Integration boundary
++
++Integrate the canonical catalogue with locally archived market data; do not blindly combine all source tables or load the entire price archive. Keep the existing daily acquisition independent and unchanged. Retain original archives outside Git, and initially load only explicitly selected product histories into the application database. A separate full-history analytics database is deferred.
++
++`pokemon-product-catalogue` is the current project name; the source repository below still uses the historical `pokemon-card-wishlist` name. Existing data remains intact, including previously imported expansions.
+ 
+ ## Pinned source baselines
+ 
+@@ -17,11 +23,14 @@
+ 
+ ## Local rehearsal
+ 
+-1. Audit the running Wishlist database with read-only queries. Record the PostgreSQL version, applied migrations, schema, imported expansions, and counts for cards, market products, mappings, snapshots, Wishlist, and audit data. List relevant BI archives with file checksums, source timestamps, and coverage gaps.
++1. Audit the running Wishlist database with read-only queries. Record the PostgreSQL version, applied migrations, schema, imported expansions, and counts for cards, market products, mappings, snapshots, Wishlist, and audit data. Audit any existing local BI databases separately from the archive. Inventory local price and product archives: paths, file counts, total bytes, date coverage, checksums, source timestamps, invalid files, gaps, and backup availability. Record the transport from GitHub acquisition to the local archive without assuming it is automated.
+ 2. Take a Wishlist backup and restore it to an isolated database. Independently replay the existing migration chain on an empty database and compare its schema with the restored copy. Compare source and restored data, including internal IDs, foreign keys, and user-owned Wishlist records. Run the existing schema and Primal Clash checks.
+-3. Reconcile one BI product and one price archive. Resolve the product using `(source_system, source_product_id)` and retain the internal `market_product_id`. BI upserts by `(snapshot_date, id_product)`; Wishlist records observations by `(market_product_id, source_snapshot_at)` with import provenance. Retain the BI archive date separately from the actual source timestamp.
++3. Before writing an importer, agree the metric schema and policies for corrected snapshots, missing source timestamps, and records without either avg30 metric. Preserve the original files and all their metrics. Reconcile selected Primal Clash products from a BI product catalogue and one price archive. Resolve the product using `(source_system, source_product_id)` and retain the internal `market_product_id`. BI upserts by `(snapshot_date, id_product)`; Wishlist records observations by `(market_product_id, source_snapshot_at)` with import provenance. Retain the BI archive date separately from the actual source timestamp.
+ 4. Compare source and imported values, record the file checksum and import run, and report rows that are missing, ambiguous, invalid, or conflicting. Replay the same file and verify stable accepted observations, no duplicate snapshots, and unchanged catalogue and Wishlist data. Exercise a corrected input after the correction policy is agreed.
+-5. Use the trial results to review the schema and approve any additive SQL migrations. Review real EN/DE packaging and contents evidence for an ETB, tin, and Poké Ball before designing sealed tables. Review and approve the import results before any historical backfill.
++5. Use the trial results to review and approve any additive SQL migrations before applying them. Extend the trial to several available source dates for explicitly selected products. Verify a CSV export filtered by product IDs, date range, and metrics against the source files. Include source observation timestamps, archive dates, currency, and provenance; report gaps and preserve nulls. Re-import the selection and verify stable counts and values. A successful price-only record is not proof of a canonical mapping.
++6. Review and approve the trial report before expanding historical imports. Limit the next import to the agreed selection; full-archive backfill is not required for integration.
++7. Exercise the controlled catalogue workflow on Karmesin & Purpur Base Set. Define scope and languages, verify source coverage, stage records, report conflicts, review mappings, and approve the change report before merging. Check expected counts, exclusions, repeat imports, and unchanged existing catalogue and user records. Unknown mappings remain explicitly unresolved.
++8. Review real EN/DE packaging and contents evidence for an ETB, tin, and Poké Ball before designing sealed tables. Record mixed-expansion contents without forcing a single-expansion identity. Continue to the mobile purchase-to-sale scenario after the integration and new-expansion workflow are validated.
+ 
+ ## Recovery
+ 
+--- a/ROADMAP.md
++++ b/ROADMAP.md
+@@ -1,12 +1,16 @@
+ # Roadmap
++
++The owner approved the revised sequence on 2026-11-13. Integration and local data checks remain pending. Existing BI acquisition continues independently; the complete local archive is retained outside Git.
+ 
+ | Stage | Checkpoint |
+ | --- | --- |
+-| 0. Repository foundation | English project documents are committed. The source commits, requirements, and open decisions are recorded. |
+-| 1. Source audit | Record the actual Wishlist schema, migration status, imported sets, and baseline counts. Inventory the BI archives and identify representative input files. |
+-| 2. Local database baseline | Start isolated PostgreSQL and dbmate using Docker Compose. Apply the source migrations to an empty database and independently restore a verified Wishlist backup into a test database. Compare schemas, keys, and data. |
+-| 3. Price integration trial | Replay one archived BI file against the isolated database. Verify identities, source timestamps, metrics, rejected records, and the outcome of a repeat run. |
+-| 4. Mobile vertical slice | Validate sealed identity and contents on real examples. Exercise sealed browsing, two individual purchases, a sale, and the realized result on a phone. Verify Wishlist persistence and eligible reference prices for the MVP. |
+-| 5. Expand coverage | Extend import coverage and add later capabilities in separately reviewed increments. |
++| 0. Repository foundation | Maintain English documentation, pinned source baselines, confirmed scope, and open technical decisions. |
++| 1. Source audit | Record actual catalogue schema, migrations, imported sets, and counts. Audit any BI databases separately. Inventory local archives, bytes, dates, gaps, checksums, and backups. |
++| 2. Local database baseline | Restore a verified catalogue backup into an isolated database. Independently replay historical migrations into an empty database. Compare schemas, keys, and data. |
++| 3. Price integration trial | Agree metric, timestamp, and correction policies. Import selected Primal Clash products from representative BI archives. Verify provenance, rejected records, mapping boundaries, and repeatability. |
++| 4. Selected history and export | Import several dates for selected products. Verify CSV filtering by product, period, and metrics against the source files. Preserve nulls and report gaps; approve results before expanding history coverage. |
++| 5. Controlled expansion workflow | Process Karmesin & Purpur Base Set through scoped source collection, staging, validation, reviewed mappings, owner approval, and repeatable merge. Preserve existing catalogue and user data. |
++| 6. Mobile vertical slice | Validate sealed identity and contents on real examples. Exercise sealed browsing, two individual purchases, a sale, and the realized result on a phone. Verify Wishlist persistence and eligible reference prices for the MVP. |
++| 7. Expand coverage | Add expansions and selected histories in reviewed increments. Reconsider a separate full-history analytics database only after archive volume and query performance justify it. |
+ 
+-See the [migration plan](docs/MIGRATION_PLAN.md) for the evidence required before moving from a trial to a historical backfill.
++See the [migration plan](docs/MIGRATION_PLAN.md) for the rehearsal, export checks, and recovery requirements. Stages 4 and 5 validate the data workflow; they do not require a price-history UI or change the agreed collection MVP.
+--- a/DECISIONS.md
++++ b/DECISIONS.md
+@@ -9,11 +9,20 @@
+ | PPM-003 | Include Wishlist as a module of the integrated product. Show Cardmarket reference prices where a verified match exists. |
+ | PPM-004 | Track one record per owned physical copy. Use the sealed purchase-to-sale workflow and mobile access as MVP acceptance criteria. |
+ 
++Approved by the owner on 2026-11-13:
++
++| ID | Decision |
++| --- | --- |
++| PPM-005 | Keep daily BI acquisition independent of catalogue imports. Retain the full available archive locally outside Git; audit actual coverage and backups. |
++| PPM-006 | Initially import only selected product histories into the application database. Defer a separate full-history analytics database until volume and performance evidence justify it. |
++| PPM-007 | Populate the catalogue through reviewed expansion batches. Market acquisition must not automatically create approved canonical records. Preserve existing catalogue and user-owned data. |
++| PPM-008 | Validate Primal Clash integration, then selected history and CSV export, then the Karmesin & Purpur Base Set workflow before continuing the mobile collection scenario. |
++
+ ## Proposed architecture decisions
+ 
+ | ID | Proposal | Evidence needed for acceptance |
+ | --- | --- | --- |
+-| ADR-001 | Use a modular monolith with one PostgreSQL 17 database, Docker Compose for local development, and dbmate for migrations. | Reproduce the historical schema and restore a Wishlist backup with verified key and data parity. |
++| ADR-001 | Use a modular monolith with one application PostgreSQL 17 database containing selected market histories, Docker Compose for local development, and dbmate for migrations. | Reproduce the historical schema and restore a Wishlist backup with verified key and data parity. |
+ | ADR-002 | Use Python and FastAPI for the backend, and React, TypeScript, and Vite for a mobile-first web app with a path to PWA installation. | Validate a small API contract and a representative flow on a physical phone. |
+ | ADR-003 | Use the Wishlist canonical catalogue as the identity foundation. Treat Cardmarket IDs as external identifiers and replay BI archives through an audited importer. | Demonstrate timestamp and metric parity and repeatable behavior on a representative archive file. |
+ 
+@@ -22,7 +31,7 @@
+ - Determine the Wishlist release gate, including CSV export and delivery order relative to the sealed workflow.
+ - Establish what identifies a sealed version and when a packaging variation requires a separate contents configuration.
+ - Compare a shared physical-item identity with separate card and sealed inventory tables.
+-- Decide how to store additional BI metrics and how to handle corrected snapshots, missing source timestamps, and observations without `avg30` or `avg30_holo`.
++- Before implementing the importer, decide how to store additional BI metrics and how to handle corrected snapshots, missing source timestamps, and observations without `avg30` or `avg30_holo`.
+ - Define how to allocate cost and proceeds for multi-item transactions and how to handle multiple currencies.
+ - Decide local phone access and PWA installation requirements after the prototype.
+ 
